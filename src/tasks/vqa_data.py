@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 
 from param import args
 from utils import load_obj_tsv
+from lxrt.tokenization import BertTokenizer
 
 # Load part of the dataset for fast checking.
 # Notice that here is the number of images instead of the number of data,
@@ -28,6 +29,57 @@ SPLIT2NAME = {
     'nominival': 'val2014',
     'test': 'test2015',
 }
+
+
+class InputFeatures(object):
+    """A single set of features of data."""
+
+    def __init__(self, input_ids, input_mask, segment_ids):
+        self.input_ids = input_ids
+        self.input_mask = input_mask
+        self.segment_ids = segment_ids
+
+
+def convert_sents_to_features(sents, max_seq_length, tokenizer):
+    """Loads a data file into a list of `InputBatch`s."""
+
+    features = []
+    for (i, sent) in enumerate(sents):
+        tokens_a = tokenizer.tokenize(sent.strip())
+
+        # Account for [CLS] and [SEP] with "- 2"
+        if len(tokens_a) > max_seq_length - 2:
+            tokens_a = tokens_a[:(max_seq_length - 2)]
+
+        # Keep segment id which allows loading BERT-weights.
+        tokens = ["[CLS]"] + tokens_a + ["[SEP]"]
+        segment_ids = [0] * len(tokens)
+
+        input_ids = tokenizer.convert_tokens_to_ids(tokens)
+
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real
+        # tokens are attended to.
+        input_mask = [1] * len(input_ids)
+
+        # Zero-pad up to the sequence length.
+        padding = [0] * (max_seq_length - len(input_ids))
+        input_ids += padding
+        input_mask += padding
+        segment_ids += padding
+
+        assert len(input_ids) == max_seq_length
+        assert len(input_mask) == max_seq_length
+        assert len(segment_ids) == max_seq_length
+
+        features.append(
+            InputFeatures(input_ids=input_ids,
+                          input_mask=input_mask,
+                          segment_ids=segment_ids))
+
+    input_ids_tensor = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+    input_mask_tensor = torch.tensor([f.input_mask for f in features], dtype=torch.long)
+    segment_ids_tensor = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+    return input_ids_tensor, input_mask_tensor, segment_ids_tensor
 
 
 class VQADataset:
@@ -80,9 +132,10 @@ FIELDNAMES = ["img_id", "img_h", "img_w", "objects_id", "objects_conf",
 FIELDNAMES would be keys in the dict returned by load_obj_tsv.
 """
 class VQATorchDataset(Dataset):
-    def __init__(self, dataset: VQADataset):
+    def __init__(self, dataset: VQADataset, tokenizer: BertTokenizer):
         super().__init__()
         self.raw_dataset = dataset
+        self.tokenizer = tokenizer
 
         if args.tiny:
             topk = TINY_IMG_NUM
@@ -138,6 +191,7 @@ class VQATorchDataset(Dataset):
         boxes[:, (1, 3)] /= img_h
         np.testing.assert_array_less(boxes, 1+1e-5)
         np.testing.assert_array_less(-boxes, 0+1e-5)
+        input_ids, input_masks, segment_ids = convert_sents_to_features(ques, 20, self.tokenizer)
 
         # Provide label (target)
         if 'label' in datum:
@@ -145,9 +199,9 @@ class VQATorchDataset(Dataset):
             target = torch.zeros(self.raw_dataset.num_answers)
             for ans, score in label.items():
                 target[self.raw_dataset.ans2label[ans]] = score
-            return ques_id, feats, boxes, ques, target
+            return ques_id, feats, boxes, input_ids, input_masks, segment_ids, target
         else:
-            return ques_id, feats, boxes, ques
+            return ques_id, feats, boxes, input_ids, input_masks, segment_ids
 
 
 class VQAEvaluator:
