@@ -148,7 +148,7 @@ class VisualConfig(object):
         self.x_layers = x_layers
         self.r_layers = r_layers
 
-        self.visual_feat_dim = 2048
+        self.visual_feat_dim = 512
         self.visual_pos_dim = 4
 
         self.obj_id_num = 1600
@@ -158,7 +158,7 @@ class VisualConfig(object):
         self.visual_loss_config = {
             'obj': (self.obj_id_num, 'ce', (-1,), 1/0.15),
             'attr': (self.attr_id_num, 'ce', (-1,), 1/0.15),
-            'feat': (2048, 'l2', (-1, 2048), 1/0.15),
+            'feat': (512, 'l2', (-1, 512), 1/0.15),
         }
 
     def set_visual_dims(self, feat_dim, pos_dim):
