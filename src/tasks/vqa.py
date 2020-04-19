@@ -44,14 +44,15 @@ class VQA:
 
         if args.valid != "":
             self.valid_tuple = get_data_tuple(
-                args.valid, bs=1024,
+                args.valid, bs=args.batch_size_val,
                 shuffle=False, drop_last=False
             )
         else:
             self.valid_tuple = None
+        bce_loss = nn.BCEWithLogitsLoss()
         
         # Model
-        self.model = VQAModel(self.train_tuple.dataset.num_answers)
+        self.model = VQAModel(self.train_tuple.dataset.num_answers, bce_loss)
 
         # Load pre-trained weights
         if args.load_lxmert is not None:
@@ -63,11 +64,10 @@ class VQA:
         # GPU options
         self.model = self.model.cuda()
         if args.multiGPU:
-            #self.model = nn.DataParallel(self.model)
-            self.model.multi_gpu()
+            self.model = nn.DataParallel(self.model)
+            #self.model.multi_gpu()
 
-        # Loss and Optimizer
-        self.bce_loss = nn.BCEWithLogitsLoss()
+        # Optimizer
         if 'bert' in args.optim:
             batch_per_epoch = len(self.train_tuple.loader)
             t_total = int(batch_per_epoch * args.epochs)
@@ -98,9 +98,8 @@ class VQA:
                 input_ids, input_mask, segment_ids = convert_sents_to_features(sent, 20, self.tokenizer)
                 feats, boxes, target = feats.cuda(), boxes.cuda(), target.cuda()
                 input_ids, segment_ids, input_mask = input_ids.cuda(), segment_ids.cuda(), input_mask.cuda()
-                logit = self.model(input_ids, segment_ids, input_mask, feats, boxes)
+                logit, loss = self.model(input_ids, segment_ids, input_mask, feats, boxes, target)
                 assert logit.dim() == target.dim() == 2
-                loss = self.bce_loss(logit, target)
                 loss = loss * logit.size(1)
 
                 loss.backward()

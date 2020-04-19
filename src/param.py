@@ -40,6 +40,7 @@ def parse_args():
 
     # Training Hyper-parameters
     parser.add_argument('--batchSize', dest='batch_size', type=int, default=256)
+    parser.add_argument('--batchSizeVal', dest='batch_size_val', help='batch size on validation', type=int, default=1024)
     parser.add_argument('--optim', default='bert')
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--epochs', type=int, default=10)
