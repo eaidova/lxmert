@@ -57,8 +57,8 @@ class VQA:
         # GPU options
         self.model = self.model.cuda()
         if args.multiGPU:
-            self.model = nn.DataParallel(self.model)
-            #self.model.lxrt_encoder.multi_gpu()
+            #self.model = nn.DataParallel(self.model)
+            self.model.multi_gpu()
 
         # Loss and Optimizer
         self.bce_loss = nn.BCEWithLogitsLoss()

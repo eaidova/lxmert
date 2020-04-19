@@ -46,4 +46,6 @@ class VQAModel(nn.Module):
 
         return logit
 
-
+    def multi_gpu(self):
+        self.lxrt_encoder.multi_gpu()
+        self.logit_fc = nn.DataParallel(self.logit_fc)
