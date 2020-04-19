@@ -12,7 +12,8 @@ from tqdm import tqdm
 from param import args
 from pretrain.qa_answer_table import load_lxmert_qa
 from tasks.vqa_model import VQAModel
-from tasks.vqa_data import VQADataset, VQATorchDataset, VQAEvaluator
+from tasks.vqa_data import VQADataset, VQATorchDataset, VQAEvaluator, convert_sents_to_features
+from lxrt.tokenization import BertTokenizer
 
 DataTuple = collections.namedtuple("DataTuple", 'dataset loader evaluator')
 
@@ -36,6 +37,11 @@ class VQA:
         self.train_tuple = get_data_tuple(
             args.train, bs=args.batch_size, shuffle=True, drop_last=True
         )
+        self.tokenizer = BertTokenizer.from_pretrained(
+            "bert-base-uncased",
+            do_lower_case=True
+        )
+
         if args.valid != "":
             self.valid_tuple = get_data_tuple(
                 args.valid, bs=1024,
@@ -85,11 +91,11 @@ class VQA:
         best_valid = 0.
         for epoch in range(args.epochs):
             quesid2ans = {}
-            for i, (ques_id, feats, boxes, input_ids, segment_ids, input_mask, target) in iter_wrapper(enumerate(loader)):
+            for i, (ques_id, feats, boxes, sent, target) in iter_wrapper(enumerate(loader)):
 
                 self.model.train()
                 self.optim.zero_grad()
-
+                input_ids, input_mask, segment_ids = convert_sents_to_features(sent, 20, self.tokenizer)
                 feats, boxes, target = feats.cuda(), boxes.cuda(), target.cuda()
                 input_ids, segment_ids, input_mask = input_ids.cuda(), segment_ids.cuda(), input_mask.cuda()
                 logit = self.model(input_ids, segment_ids, input_mask, feats, boxes)
@@ -137,8 +143,9 @@ class VQA:
         dset, loader, evaluator = eval_tuple
         quesid2ans = {}
         for i, datum_tuple in enumerate(loader):
-            ques_id, feats, boxes, input_ids, segment_ids, input_mask = datum_tuple[:6]   # Avoid seeing ground truth
+            ques_id, feats, boxes, sent = datum_tuple[:4]   # Avoid seeing ground truth
             with torch.no_grad():
+                input_ids, input_mask, segment_ids = convert_sents_to_features(sent, 20, self.tokenizer)
                 feats, boxes = feats.cuda(), boxes.cuda()
                 input_ids, segment_ids, input_mask = input_ids.cuda(), segment_ids.cuda(), input_mask.cuda()
                 logit = self.model(input_ids, segment_ids, input_mask, feats, boxes)
@@ -159,7 +166,7 @@ class VQA:
     def oracle_score(data_tuple):
         dset, loader, evaluator = data_tuple
         quesid2ans = {}
-        for i, (ques_id, feats, boxes, input_ids, segment_ids, input_mask, target) in enumerate(loader):
+        for i, (ques_id, feats, boxes, sent, target) in enumerate(loader):
             _, label = target.max(1)
             for qid, l in zip(ques_id, label.cpu().numpy()):
                 ans = dset.label2ans[l]

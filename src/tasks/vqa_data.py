@@ -11,7 +11,6 @@ from torch.utils.data import Dataset
 
 from param import args
 from utils import load_obj_tsv
-from lxrt.tokenization import BertTokenizer
 
 # Load part of the dataset for fast checking.
 # Notice that here is the number of images instead of the number of data,
@@ -132,10 +131,9 @@ FIELDNAMES = ["img_id", "img_h", "img_w", "objects_id", "objects_conf",
 FIELDNAMES would be keys in the dict returned by load_obj_tsv.
 """
 class VQATorchDataset(Dataset):
-    def __init__(self, dataset: VQADataset, tokenizer: BertTokenizer):
+    def __init__(self, dataset: VQADataset):
         super().__init__()
         self.raw_dataset = dataset
-        self.tokenizer = tokenizer
 
         if args.tiny:
             topk = TINY_IMG_NUM
@@ -191,7 +189,7 @@ class VQATorchDataset(Dataset):
         boxes[:, (1, 3)] /= img_h
         np.testing.assert_array_less(boxes, 1+1e-5)
         np.testing.assert_array_less(-boxes, 0+1e-5)
-        input_ids, input_masks, segment_ids = convert_sents_to_features(ques, 20, self.tokenizer)
+        #input_ids, input_masks, segment_ids = convert_sents_to_features(ques, 20, self.tokenizer)
 
         # Provide label (target)
         if 'label' in datum:
@@ -199,9 +197,9 @@ class VQATorchDataset(Dataset):
             target = torch.zeros(self.raw_dataset.num_answers)
             for ans, score in label.items():
                 target[self.raw_dataset.ans2label[ans]] = score
-            return ques_id, feats, boxes, input_ids, input_masks, segment_ids, target
+            return ques_id, feats, boxes, ques, target
         else:
-            return ques_id, feats, boxes, input_ids, input_masks, segment_ids
+            return ques_id, feats, boxes, ques
 
 
 class VQAEvaluator:
