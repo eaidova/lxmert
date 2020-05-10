@@ -12,7 +12,8 @@ from tqdm import tqdm
 from param import args
 from pretrain.qa_answer_table import load_lxmert_qa
 from tasks.vqa_model import VQAModel
-from tasks.vqa_data import VQADataset, VQATorchDataset, VQAEvaluator
+from tasks.vqa_data import VQADataset, VQATorchDataset, VQAEvaluator, convert_sents_to_features
+from lxrt.tokenization import BertTokenizer
 
 DataTuple = collections.namedtuple("DataTuple", 'dataset loader evaluator')
 
@@ -36,16 +37,22 @@ class VQA:
         self.train_tuple = get_data_tuple(
             args.train, bs=args.batch_size, shuffle=True, drop_last=True
         )
+        self.tokenizer = BertTokenizer.from_pretrained(
+            "bert-base-uncased",
+            do_lower_case=True
+        )
+
         if args.valid != "":
             self.valid_tuple = get_data_tuple(
-                args.valid, bs=1024,
+                args.valid, bs=args.batch_size_val,
                 shuffle=False, drop_last=False
             )
         else:
             self.valid_tuple = None
+        bce_loss = nn.BCEWithLogitsLoss()
         
         # Model
-        self.model = VQAModel(self.train_tuple.dataset.num_answers)
+        self.model = VQAModel(self.train_tuple.dataset.num_answers, bce_loss)
 
         # Load pre-trained weights
         if args.load_lxmert is not None:
@@ -57,10 +64,10 @@ class VQA:
         # GPU options
         self.model = self.model.cuda()
         if args.multiGPU:
-            self.model.lxrt_encoder.multi_gpu()
+            self.model = nn.DataParallel(self.model)
+            #self.model.multi_gpu()
 
-        # Loss and Optimizer
-        self.bce_loss = nn.BCEWithLogitsLoss()
+        # Optimizer
         if 'bert' in args.optim:
             batch_per_epoch = len(self.train_tuple.loader)
             t_total = int(batch_per_epoch * args.epochs)
@@ -88,11 +95,11 @@ class VQA:
 
                 self.model.train()
                 self.optim.zero_grad()
-
+                input_ids, input_mask, segment_ids = convert_sents_to_features(sent, 20, self.tokenizer)
                 feats, boxes, target = feats.cuda(), boxes.cuda(), target.cuda()
-                logit = self.model(feats, boxes, sent)
+                input_ids, segment_ids, input_mask = input_ids.cuda(), segment_ids.cuda(), input_mask.cuda()
+                logit, loss = self.model(input_ids, segment_ids, input_mask, feats, boxes, target)
                 assert logit.dim() == target.dim() == 2
-                loss = self.bce_loss(logit, target)
                 loss = loss * logit.size(1)
 
                 loss.backward()
@@ -137,8 +144,10 @@ class VQA:
         for i, datum_tuple in enumerate(loader):
             ques_id, feats, boxes, sent = datum_tuple[:4]   # Avoid seeing ground truth
             with torch.no_grad():
+                input_ids, input_mask, segment_ids = convert_sents_to_features(sent, 20, self.tokenizer)
                 feats, boxes = feats.cuda(), boxes.cuda()
-                logit = self.model(feats, boxes, sent)
+                input_ids, segment_ids, input_mask = input_ids.cuda(), segment_ids.cuda(), input_mask.cuda()
+                logit = self.model(input_ids, segment_ids, input_mask, feats, boxes)
                 score, label = logit.max(1)
                 for qid, l in zip(ques_id, label.cpu().numpy()):
                     ans = dset.label2ans[l]

@@ -12,7 +12,7 @@ MAX_VQA_LENGTH = 20
 
 
 class VQAModel(nn.Module):
-    def __init__(self, num_answers):
+    def __init__(self, num_answers, loss=None):
         super().__init__()
         
         # Build LXRT encoder
@@ -30,8 +30,9 @@ class VQAModel(nn.Module):
             nn.Linear(hid_dim * 2, num_answers)
         )
         self.logit_fc.apply(self.lxrt_encoder.model.init_bert_weights)
+        self.loss = loss
 
-    def forward(self, feat, pos, sent):
+    def forward(self, input_ids, segment_ids, input_mask, feat, pos, target=None):
         """
         b -- batch_size, o -- object_number, f -- visual_feature_size
 
@@ -41,9 +42,12 @@ class VQAModel(nn.Module):
         :param leng: (b,) Type -- int numpy array
         :return: (b, num_answer) The logit of each answers.
         """
-        x = self.lxrt_encoder(sent, (feat, pos))
+        x = self.lxrt_encoder(input_ids, segment_ids, input_mask, (feat, pos))
         logit = self.logit_fc(x)
+        if target is None or self.loss is None:
+            return logit
+        return logit, self.loss(logit, target)
 
-        return logit
-
-
+    def multi_gpu(self):
+        self.lxrt_encoder.multi_gpu()
+        self.logit_fc = nn.DataParallel(self.logit_fc)
