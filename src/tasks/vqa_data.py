@@ -20,7 +20,7 @@ FAST_IMG_NUM = 5000
 
 # The path to data and image features.
 VQA_DATA_ROOT = 'data/vqa/'
-MSCOCO_IMGFEAT_ROOT = 'data/mscoco_imgfeat/'
+MSCOCO_IMGFEAT_ROOT = 'data/mask_rcnn_features'
 SPLIT2NAME = {
     'train': 'train2014',
     'valid': 'val2014',
@@ -98,7 +98,7 @@ class VQATorchDataset(Dataset):
             # It is saved as the top 5K features in val2014_***.tsv
             load_topk = 5000 if (split == 'minival' and topk is None) else topk
             img_data.extend(load_obj_tsv(
-                os.path.join(MSCOCO_IMGFEAT_ROOT, '%s_obj36.tsv' % (SPLIT2NAME[split])),
+                os.path.join(MSCOCO_IMGFEAT_ROOT, '%s.tsv' % (SPLIT2NAME[split])),
                 topk=load_topk))
 
         # Convert img list to dict

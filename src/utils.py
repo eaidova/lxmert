@@ -9,8 +9,18 @@ import time
 import numpy as np
 
 csv.field_size_limit(sys.maxsize)
-FIELDNAMES = ["img_id", "img_h", "img_w", "objects_id", "objects_conf",
-              "attrs_id", "attrs_conf", "num_boxes", "boxes", "features"]
+FIELDNAMES = [
+    "img_id",
+    "img_h",
+    "img_w",
+    "objects_id",
+    "objects_conf",
+    "num_boxes",
+    "boxes",
+    "features",
+    'bbox_features',
+    'masks'
+]
 
 
 def load_obj_tsv(fname, topk=None):
@@ -32,18 +42,22 @@ def load_obj_tsv(fname, topk=None):
             for key in ['img_h', 'img_w', 'num_boxes']:
                 item[key] = int(item[key])
             
-            boxes = item['num_boxes']
+            boxes =item['num_boxes']
+            if not boxes:
+                continue
             decode_config = [
                 ('objects_id', (boxes, ), np.int64),
                 ('objects_conf', (boxes, ), np.float32),
-                ('attrs_id', (boxes, ), np.int64),
-                ('attrs_conf', (boxes, ), np.float32),
-                ('boxes', (boxes, 4), np.float32),
+                ('boxes', (boxes, -1), np.float32),
                 ('features', (boxes, -1), np.float32),
             ]
             for key, shape, dtype in decode_config:
-                item[key] = np.frombuffer(base64.b64decode(item[key]), dtype=dtype)
-                item[key] = item[key].reshape(shape)
+                item[key] = np.frombuffer(base64.b64decode(item[key][2:]), dtype=dtype)
+                item[key] = np.array(item[key]).reshape(shape)
+                if key == 'boxes':
+                    item[key] = item[key][:, :4]
+                if key == 'features':
+                    item[key] = item[key][:, :512]
                 item[key].setflags(write=False)
 
             data.append(item)
