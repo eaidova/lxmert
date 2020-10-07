@@ -4,6 +4,7 @@
 import json
 import os
 import pickle
+from collections import Counter
 
 import numpy as np
 import torch
@@ -28,6 +29,54 @@ SPLIT2NAME = {
     'nominival': 'val2014',
     'test': 'test2015',
 }
+
+
+class VizWizVQADataset:
+    def __init__(self, splits: str):
+        self.name = splits
+        self.splits = splits.split(',')
+
+        # Loading datasets
+        self.data = []
+        for split in self.splits:
+            self.data.extend(json.load(open("data/vizwiz/{}.json".format(split))))
+        print("Load {} data from split(s) {}.".format(len(self.data), self.name))
+
+        # Convert list to dict (for evaluation)
+        self.id2datum = {
+            datum['question_id']: datum
+            for datum in self.data
+        }
+
+        # Answers
+        self.ans2label = json.load(open("data/vizwiz/trainval_ans2label.json"))
+        self.label2ans = json.load(open("data/vizwiz/trainval_label2ans.json"))
+        assert len(self.ans2label) == len(self.label2ans)
+
+    @property
+    def num_answers(self):
+        return len(self.ans2label)
+
+    def __len__(self):
+        return len(self.data)
+
+    @staticmethod
+    def preprocess_data(raw_dataset, filter_unanswerable=True):
+        preprocessed_data = []
+        for datum in raw_dataset:
+            image_id = datum['image'].rsplit('.')[0]
+            datum['img_id'] = image_id
+            datum['question_id'] = image_id
+            datum['sent'] = datum['question']
+            if 'answers' in datum:
+                answers = datum['answers']
+                count_answ = Counter([ans['answer'] for ans in answers])
+                label = {answer: min(1, score / 3) for answer, score in count_answ.items()}
+                datum['label'] = label
+                if filter_unanswerable and not datum['answerable']:
+                    continue
+            preprocessed_data.append(datum)
+        return preprocessed_data
 
 
 class VQADataset:
@@ -184,5 +233,3 @@ class VQAEvaluator:
                     'answer': ans
                 })
             json.dump(result, f, indent=4, sort_keys=True)
-
-
