@@ -12,13 +12,20 @@ from tqdm import tqdm
 from param import args
 from pretrain.qa_answer_table import load_lxmert_qa
 from tasks.vqa_model import VQAModel
-from tasks.vqa_data import VQADataset, VQATorchDataset, VQAEvaluator
+from tasks.vqa_data import VQADataset, VizWizDataset, VQATorchDataset, VQAEvaluator
 
 DataTuple = collections.namedtuple("DataTuple", 'dataset loader evaluator')
+datasets = {
+    'vqa': VQADataset,
+    'vizwiz': VizWizDataset
+}
 
 
-def get_data_tuple(splits: str, bs:int, shuffle=False, drop_last=False) -> DataTuple:
-    dset = VQADataset(splits)
+def get_data_tuple(splits: str, bs:int, shuffle=False, drop_last=False, dataset_type='vqa') -> DataTuple:
+    dataset_class = datasets.get(dataset_type)
+    if dataset_class is None:
+        raise ValueError("unsupported dataset type {}".format(dataset_type))
+    dset = dataset_class(splits)
     tset = VQATorchDataset(dset)
     evaluator = VQAEvaluator(dset)
     data_loader = DataLoader(
@@ -34,12 +41,13 @@ class VQA:
     def __init__(self):
         # Datasets
         self.train_tuple = get_data_tuple(
-            args.train, bs=args.batch_size, shuffle=True, drop_last=True
+            args.train, bs=args.batch_size, shuffle=True, drop_last=True, dataset_type=args.dataset_type
         )
         if args.valid != "":
             self.valid_tuple = get_data_tuple(
                 args.valid, bs=1024,
-                shuffle=False, drop_last=False
+                shuffle=False, drop_last=False,
+                dataset_type=args.dataset_type
             )
         else:
             self.valid_tuple = None
@@ -191,8 +199,8 @@ if __name__ == "__main__":
                                shuffle=False, drop_last=False),
                 dump=os.path.join(args.output, 'test_predict.json')
             )
-        elif 'val' in args.test:    
-            # Since part of valididation data are used in pre-training/fine-tuning,
+        elif 'val' in args.test:
+            # Since part of validation data are used in pre-training/fine-tuning,
             # only validate on the minival set.
             result = vqa.evaluate(
                 get_data_tuple('minival', bs=950,
@@ -210,5 +218,3 @@ if __name__ == "__main__":
         else:
             print("DO NOT USE VALIDATION")
         vqa.train(vqa.train_tuple, vqa.valid_tuple)
-
-

@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument("--train", default='train')
     parser.add_argument("--valid", default='valid')
     parser.add_argument("--test", default=None)
+    parser.add_argument('--dataset_type', required=False, default='vqa')
 
     # Training Hyper-parameters
     parser.add_argument('--batchSize', dest='batch_size', type=int, default=256)
