@@ -3,8 +3,8 @@
 
 import json
 import os
-import pickle
 from collections import Counter
+import re
 
 import numpy as np
 import torch
@@ -39,7 +39,7 @@ class VizWizVQADataset:
         # Loading datasets
         self.data = []
         for split in self.splits:
-            self.data.extend(json.load(open("data/vizwiz/{}.json".format(split))))
+            self.data.extend(self.preprocess_data(json.load(open("data/vizwiz/{}.json".format(split)))))
         print("Load {} data from split(s) {}.".format(len(self.data), self.name))
 
         # Convert list to dict (for evaluation)
@@ -47,10 +47,20 @@ class VizWizVQADataset:
             datum['question_id']: datum
             for datum in self.data
         }
-
-        # Answers
-        self.ans2label = json.load(open("data/vizwiz/trainval_ans2label.json"))
-        self.label2ans = json.load(open("data/vizwiz/trainval_label2ans.json"))
+        if os.path.exists("data/vizwiz/trainval_ans2label.json") and os.path.exists("data/vizwiz/trainval_label2ans.json"):
+            # Answers
+            with open("data/vizwiz/trainval_ans2label.json") as ans2label_file:
+                self.ans2label = json.load(ans2label_file)
+            with open("data/vizwiz/trainval_label2ans.json") as label2ans_file:
+                self.label2ans = json.load(label2ans_file)
+        else:
+            self.ans2label, self.label2ans = self.create_answer_vocab(top_k=5000)
+            print("Answer vocab with {} prepared.".format(len(self.ans2label)))
+            print("Vocab will be saved to data/vizwiz directory")
+            with open("data/vizwiz/trainval_ans2label.json", "w") as ans2label_file:
+                json.dump(self.ans2label, ans2label_file)
+            with open("data/vizwiz/trainval_label2ans.json", "w") as label2ans_file:
+                json.dump(self.label2ans, label2ans_file)
         assert len(self.ans2label) == len(self.label2ans)
 
     @property
@@ -60,8 +70,7 @@ class VizWizVQADataset:
     def __len__(self):
         return len(self.data)
 
-    @staticmethod
-    def preprocess_data(raw_dataset, filter_unanswerable=True):
+    def preprocess_data(self, raw_dataset, filter_unanswerable=True):
         preprocessed_data = []
         for datum in raw_dataset:
             image_id = datum['image'].rsplit('.')[0]
@@ -69,14 +78,48 @@ class VizWizVQADataset:
             datum['question_id'] = image_id
             datum['sent'] = datum['question']
             if 'answers' in datum:
-                answers = datum['answers']
-                count_answ = Counter([ans['answer'] for ans in answers])
-                label = {answer: min(1, score / 3) for answer, score in count_answ.items()}
-                datum['label'] = label
                 if filter_unanswerable and not datum['answerable']:
                     continue
+                answers = datum['answers']
+                count_answ = Counter(self.prepare_answer([ans['answer'] for ans in answers]))
+                label = {answer: min(1, score / 3) for answer, score in count_answ.items()}
+                datum['label'] = label
             preprocessed_data.append(datum)
         return preprocessed_data
+
+    @staticmethod
+    def prepare_answer(answers):
+        prepared_sample_answers = []
+        for answer in answers:
+            answer = answer.lower()
+
+            # define desired replacements here
+            punctuation_dict = {'.': ' ', "'": '', '?': ' ', '_': ' ', '-': ' ', '/': ' ', ',': ' '}
+
+            rep = punctuation_dict
+            rep = dict((re.escape(k), v) for k, v in rep.items())
+            pattern = re.compile("|".join(rep.keys()))
+            answer = pattern.sub(lambda m: rep[re.escape(m.group(0))], answer)
+            prepared_sample_answers.append(answer)
+
+        return prepared_sample_answers
+
+    def create_answer_vocab(self, top_k=5000):
+        answers = []
+        for split in ['train', 'valid']:
+            data = json.load(open("data/vizwiz/{}.json".format(split)))
+            for obj in data:
+                answers.extend([self.prepare_answer([ann['answer'] for ann in obj['answers']])])
+
+        counter = Counter(answers)
+        counted_ans = counter.most_common(top_k)
+        # start from labels from 0
+        ans2label, label2ans = {}, {}
+        for i, t in enumerate(counted_ans):
+            ans2label[t[0]] = i
+            label2ans[i] = t[0]
+
+        return ans2label, label2ans
 
 
 class VQADataset:
