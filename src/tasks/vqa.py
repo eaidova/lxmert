@@ -12,12 +12,12 @@ from tqdm import tqdm
 from param import args
 from pretrain.qa_answer_table import load_lxmert_qa
 from tasks.vqa_model import VQAModel
-from tasks.vqa_data import VQADataset, VizWizDataset, VQATorchDataset, VQAEvaluator
+from tasks.vqa_data import VQADataset, VizWizVQADataset, VQATorchDataset, VQAEvaluator
 
 DataTuple = collections.namedtuple("DataTuple", 'dataset loader evaluator')
 datasets = {
     'vqa': VQADataset,
-    'vizwiz': VizWizDataset
+    'vizwiz': VizWizVQADataset
 }
 
 
@@ -45,15 +45,16 @@ class VQA:
         )
         if args.valid != "":
             self.valid_tuple = get_data_tuple(
-                args.valid, bs=1024,
+                args.valid, bs=512,
                 shuffle=False, drop_last=False,
                 dataset_type=args.dataset_type
             )
         else:
             self.valid_tuple = None
-        
         # Model
-        self.model = VQAModel(self.train_tuple.dataset.num_answers)
+        self.model = VQAModel(
+            self.train_tuple.dataset.num_answers if not args.transfer_learning else VQADataset.get_answers_number()
+        )
 
         # Load pre-trained weights
         if args.load_lxmert is not None:
@@ -61,7 +62,12 @@ class VQA:
         if args.load_lxmert_qa is not None:
             load_lxmert_qa(args.load_lxmert_qa, self.model,
                            label2ans=self.train_tuple.dataset.label2ans)
-        
+        self.prepare_model()
+        # Output Directory
+        self.output = args.output
+        os.makedirs(self.output, exist_ok=True)
+
+    def prepare_model(self):
         # GPU options
         self.model = self.model.cuda()
         if args.multiGPU:
@@ -80,10 +86,6 @@ class VQA:
                                   t_total=t_total)
         else:
             self.optim = args.optimizer(self.model.parameters(), args.lr)
-        
-        # Output Directory
-        self.output = args.output
-        os.makedirs(self.output, exist_ok=True)
 
     def train(self, train_tuple, eval_tuple):
         dset, loader, evaluator = train_tuple
@@ -110,7 +112,10 @@ class VQA:
                 score, label = logit.max(1)
                 for qid, l in zip(ques_id, label.cpu().numpy()):
                     ans = dset.label2ans[l]
-                    quesid2ans[qid.item()] = ans
+                    if not isinstance(qid, str):
+                        quesid2ans[qid.item()] = ans
+                    else:
+                        quesid2ans[qid] = ans
 
             log_str = "\nEpoch %d: Train %0.2f\n" % (epoch, evaluator.evaluate(quesid2ans) * 100.)
 
@@ -150,7 +155,10 @@ class VQA:
                 score, label = logit.max(1)
                 for qid, l in zip(ques_id, label.cpu().numpy()):
                     ans = dset.label2ans[l]
-                    quesid2ans[qid.item()] = ans
+                    if not isinstance(qid, str):
+                        quesid2ans[qid.item()] = ans
+                    else:
+                        quesid2ans[qid] = ans
         if dump is not None:
             evaluator.dump_result(quesid2ans, dump)
         return quesid2ans
@@ -168,7 +176,9 @@ class VQA:
             _, label = target.max(1)
             for qid, l in zip(ques_id, label.cpu().numpy()):
                 ans = dset.label2ans[l]
-                quesid2ans[qid.item()] = ans
+                if not isinstance(qid, str):
+                    qid= qid.item()
+                quesid2ans[qid] = ans
         return evaluator.evaluate(quesid2ans)
 
     def save(self, name):
@@ -179,6 +189,9 @@ class VQA:
         print("Load model from %s" % path)
         state_dict = torch.load("%s.pth" % path)
         self.model.load_state_dict(state_dict)
+        if args.transfer_learning:
+            self.model.create_head(self.train_tuple.dataset.num_answers)
+            self.prepare_model()
 
 
 if __name__ == "__main__":

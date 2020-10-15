@@ -23,11 +23,12 @@ FAST_IMG_NUM = 5000
 VQA_DATA_ROOT = 'data/vqa/'
 MSCOCO_IMGFEAT_ROOT = 'data/mscoco_imgfeat/'
 SPLIT2NAME = {
-    'train': 'train2014',
+    'train': 'train',
     'valid': 'val2014',
     'minival': 'val2014',
     'nominival': 'val2014',
-    'test': 'test2015',
+    'test': 'test',
+    'val': 'val'
 }
 
 
@@ -39,7 +40,7 @@ class VizWizVQADataset:
         # Loading datasets
         self.data = []
         for split in self.splits:
-            self.data.extend(self.preprocess_data(json.load(open("data/vizwiz/{}.json".format(split)))))
+            self.data.extend(self.preprocess_data(json.load(open("data/vizwiz/Annotations/{}.json".format(split))), True))
         print("Load {} data from split(s) {}.".format(len(self.data), self.name))
 
         # Convert list to dict (for evaluation)
@@ -47,12 +48,23 @@ class VizWizVQADataset:
             datum['question_id']: datum
             for datum in self.data
         }
+
+        def jsonKeys2int(x):
+            if isinstance(x, dict):
+                return {int(k): v for k, v in x.items()}
+            return x
+
+        def jsonValues2int(x):
+            if isinstance(x, dict):
+                return {k: int(v) for k, v in x.items()}
+            return x
+
         if os.path.exists("data/vizwiz/trainval_ans2label.json") and os.path.exists("data/vizwiz/trainval_label2ans.json"):
             # Answers
             with open("data/vizwiz/trainval_ans2label.json") as ans2label_file:
-                self.ans2label = json.load(ans2label_file)
+                self.ans2label = json.load(ans2label_file, object_hook=jsonValues2int)
             with open("data/vizwiz/trainval_label2ans.json") as label2ans_file:
-                self.label2ans = json.load(label2ans_file)
+                self.label2ans = json.load(label2ans_file, object_hook=jsonKeys2int)
         else:
             self.ans2label, self.label2ans = self.create_answer_vocab(top_k=5000)
             print("Answer vocab with {} prepared.".format(len(self.ans2label)))
@@ -76,7 +88,7 @@ class VizWizVQADataset:
             image_id = datum['image'].rsplit('.')[0]
             datum['img_id'] = image_id
             datum['question_id'] = image_id
-            datum['sent'] = datum['question']
+            datum['sent'] = self.preprocess_question(datum['question'])
             if 'answers' in datum:
                 if filter_unanswerable and not datum['answerable']:
                     continue
@@ -104,12 +116,26 @@ class VizWizVQADataset:
 
         return prepared_sample_answers
 
+    @staticmethod
+    def preprocess_question(question):
+        conversational_dict = {"thank you": '', "thanks": '', "thank": '', "please": '', "hello": '',
+                               "hi ": ' ', "hey ": ' ', "good morning": '', "good afternoon": '', "have a nice day": '',
+                               "okay": '', "goodbye": ''}
+
+
+        # use these three lines to do the replacement
+        rep = dict((re.escape(k), v) for k, v in conversational_dict.items())
+        pattern = re.compile("|".join(rep.keys()))
+        question = pattern.sub(lambda m: rep[re.escape(m.group(0))], question)
+        return question
+
     def create_answer_vocab(self, top_k=5000):
         answers = []
-        for split in ['train', 'valid']:
-            data = json.load(open("data/vizwiz/{}.json".format(split)))
+        for split in ['train', 'val']:
+            data = json.load(open("data/vizwiz/Annotations/{}.json".format(split)))
             for obj in data:
-                answers.extend([self.prepare_answer([ann['answer'] for ann in obj['answers']])])
+                for ann in obj['answers']:
+                    answers.extend(self.prepare_answer([ann['answer']]))
 
         counter = Counter(answers)
         counted_ans = counter.most_common(top_k)
@@ -152,14 +178,28 @@ class VQADataset:
             for datum in self.data
         }
 
+        def jsonKeys2int(x):
+            if isinstance(x, dict):
+                return {int(k): v for k, v in x.items()}
+            return x
+        def jsonValues2int(x):
+            if isinstance(x, dict):
+                return {k: int(v) for k, v in x.items()}
+            return x
+
+
         # Answers
-        self.ans2label = json.load(open("data/vqa/trainval_ans2label.json"))
-        self.label2ans = json.load(open("data/vqa/trainval_label2ans.json"))
+        self.ans2label = json.load(open("data/vqa/trainval_ans2label.json"), object_hook=jsonValues2int)
+        self.label2ans = json.load(open("data/vqa/trainval_label2ans.json"), object_hook=jsonKeys2int)
         assert len(self.ans2label) == len(self.label2ans)
 
     @property
     def num_answers(self):
         return len(self.ans2label)
+
+    @staticmethod
+    def get_answers_number():
+        return len(json.load(open("data/vqa/trainval_ans2label.json")))
 
     def __len__(self):
         return len(self.data)
@@ -236,7 +276,8 @@ class VQATorchDataset(Dataset):
             label = datum['label']
             target = torch.zeros(self.raw_dataset.num_answers)
             for ans, score in label.items():
-                target[self.raw_dataset.ans2label[ans]] = score
+                if ans in self.raw_dataset.ans2label:
+                    target[self.raw_dataset.ans2label[ans]] = score
             return ques_id, feats, boxes, ques, target
         else:
             return ques_id, feats, boxes, ques

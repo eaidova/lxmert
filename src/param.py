@@ -46,6 +46,7 @@ def parse_args():
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--seed', type=int, default=9595, help='random seed')
+    parser.add_argument('--transfer_learning', action='store_true')
 
     # Debugging
     parser.add_argument('--output', type=str, default='snap/test')

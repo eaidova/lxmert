@@ -20,16 +20,25 @@ class VQAModel(nn.Module):
             args,
             max_seq_length=MAX_VQA_LENGTH
         )
-        hid_dim = self.lxrt_encoder.dim
+
         
         # VQA Answer heads
+        self.create_head(num_answers)
+
+    def create_head(self, num_answers):
+        hid_dim = self.lxrt_encoder.dim
         self.logit_fc = nn.Sequential(
             nn.Linear(hid_dim, hid_dim * 2),
             GeLU(),
             BertLayerNorm(hid_dim * 2, eps=1e-12),
             nn.Linear(hid_dim * 2, num_answers)
         )
-        self.logit_fc.apply(self.lxrt_encoder.model.init_bert_weights)
+        init_weights = (
+            self.lxrt_encoder.model.init_bert_weights
+            if not isinstance(self.lxrt_encoder.model, nn.DataParallel)
+            else self.lxrt_encoder.model.module.init_bert_weights
+        )
+        self.logit_fc.apply(init_weights)
 
     def forward(self, feat, pos, sent):
         """
