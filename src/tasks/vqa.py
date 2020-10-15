@@ -136,7 +136,7 @@ class VQA:
 
         self.save("LAST")
 
-    def predict(self, eval_tuple: DataTuple, dump=None):
+    def predict(self, eval_tuple: DataTuple, dump=None, dataset_type='vqa'):
         """
         Predict the answers to questions in a data split.
 
@@ -160,7 +160,7 @@ class VQA:
                     else:
                         quesid2ans[qid] = ans
         if dump is not None:
-            evaluator.dump_result(quesid2ans, dump)
+            evaluator.dump_result(quesid2ans, dump, dataset_type)
         return quesid2ans
 
     def evaluate(self, eval_tuple: DataTuple, dump=None):
@@ -210,7 +210,7 @@ if __name__ == "__main__":
             vqa.predict(
                 get_data_tuple(args.test, bs=950,
                                shuffle=False, drop_last=False),
-                dump=os.path.join(args.output, 'test_predict.json')
+                dump=os.path.join(args.output, 'test_predict.json', dataset_type=args.dataset_type)
             )
         elif 'val' in args.test:
             # Since part of validation data are used in pre-training/fine-tuning,

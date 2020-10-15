@@ -296,7 +296,7 @@ class VQAEvaluator:
                 score += label[ans]
         return score / len(quesid2ans)
 
-    def dump_result(self, quesid2ans: dict, path):
+    def dump_result(self, quesid2ans: dict, path, dataset_type='vqa'):
         """
         Dump results to a json file, which could be submitted to the VQA online evaluation.
         VQA json file submission requirement:
@@ -312,8 +312,11 @@ class VQAEvaluator:
         with open(path, 'w') as f:
             result = []
             for ques_id, ans in quesid2ans.items():
-                result.append({
-                    'question_id': ques_id,
-                    'answer': ans
-                })
+                sample = {'answer': ans}
+                if dataset_type == 'vizwiz':
+                    image_id = '{}.jpg'.format(ques_id)
+                    sample['image'] = image_id
+                else:
+                    sample['question_id'] = ques_id
+                result.append(sample)
             json.dump(result, f, indent=4, sort_keys=True)
