@@ -30,6 +30,12 @@ SPLIT2NAME = {
     'test': 'test',
     'val': 'val'
 }
+vizwiz_splits = {
+    'train': 'train',
+    'valid': 'val',
+    'test': 'test',
+    'val': 'val'
+}
 
 
 class VizWizVQADataset:
@@ -40,7 +46,7 @@ class VizWizVQADataset:
         # Loading datasets
         self.data = []
         for split in self.splits:
-            self.data.extend(self.preprocess_data(json.load(open("data/vizwiz/Annotations/{}.json".format(split))), True))
+            self.data.extend(self.preprocess_data(json.load(open("data/vizwiz/Annotations/{}.json".format(vizwiz_splits[split]))), False))
         print("Load {} data from split(s) {}.".format(len(self.data), self.name))
 
         # Convert list to dict (for evaluation)

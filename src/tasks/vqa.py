@@ -209,8 +209,8 @@ if __name__ == "__main__":
         if 'test' in args.test:
             vqa.predict(
                 get_data_tuple(args.test, bs=950,
-                               shuffle=False, drop_last=False),
-                dump=os.path.join(args.output, 'test_predict.json', dataset_type=args.dataset_type)
+                               shuffle=False, drop_last=False, dataset_type=args.dataset_type),
+                dump=os.path.join(args.output, 'test_predict.json'), dataset_type=args.dataset_type
             )
         elif 'val' in args.test:
             # Since part of validation data are used in pre-training/fine-tuning,
