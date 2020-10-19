@@ -39,7 +39,7 @@ vizwiz_splits = {
 
 
 class VizWizVQADataset:
-    def __init__(self, splits: str):
+    def __init__(self, splits: str, vocab_size=5000):
         self.name = splits
         self.splits = splits.split(',')
 
@@ -65,20 +65,22 @@ class VizWizVQADataset:
                 return {k: int(v) for k, v in x.items()}
             return x
 
-        if os.path.exists("data/vizwiz/trainval_ans2label.json") and os.path.exists("data/vizwiz/trainval_label2ans.json"):
+        ans2label_file = "data/vizwiz/trainval_ans2label_{}.json".format(vocab_size)
+        label2ans_file = "data/vizwiz/trainval_label2ans_{}.json".format(vocab_size)
+        if os.path.exists(ans2label_file) and os.path.exists(label2ans_file):
             # Answers
-            with open("data/vizwiz/trainval_ans2label.json") as ans2label_file:
-                self.ans2label = json.load(ans2label_file, object_hook=jsonValues2int)
-            with open("data/vizwiz/trainval_label2ans.json") as label2ans_file:
-                self.label2ans = json.load(label2ans_file, object_hook=jsonKeys2int)
+            with open(ans2label_file) as ans2label_file_:
+                self.ans2label = json.load(ans2label_file_, object_hook=jsonValues2int)
+            with open(label2ans_file) as label2ans_file_:
+                self.label2ans = json.load(label2ans_file_, object_hook=jsonKeys2int)
         else:
-            self.ans2label, self.label2ans = self.create_answer_vocab(top_k=5000)
+            self.ans2label, self.label2ans = self.create_answer_vocab(top_k=vocab_size)
             print("Answer vocab with {} prepared.".format(len(self.ans2label)))
             print("Vocab will be saved to data/vizwiz directory")
-            with open("data/vizwiz/trainval_ans2label.json", "w") as ans2label_file:
-                json.dump(self.ans2label, ans2label_file)
-            with open("data/vizwiz/trainval_label2ans.json", "w") as label2ans_file:
-                json.dump(self.label2ans, label2ans_file)
+            with open(ans2label_file, "w") as ans2label_file_:
+                json.dump(self.ans2label, ans2label_file_)
+            with open(label2ans_file, "w") as label2ans_file_:
+                json.dump(self.label2ans, label2ans_file_)
         assert len(self.ans2label) == len(self.label2ans)
 
     @property
@@ -94,7 +96,7 @@ class VizWizVQADataset:
             image_id = datum['image'].rsplit('.')[0]
             datum['img_id'] = image_id
             datum['question_id'] = image_id
-            datum['sent'] = self.preprocess_question(datum['question'])
+            datum['sent'] = datum['question']
             if 'answers' in datum:
                 if filter_unanswerable and not datum['answerable']:
                     continue
@@ -168,7 +170,7 @@ class VQADataset:
             "sent": "What is this photo taken looking through?"
         }
     """
-    def __init__(self, splits: str):
+    def __init__(self, splits: str, *args, **kwargs):
         self.name = splits
         self.splits = splits.split(',')
 

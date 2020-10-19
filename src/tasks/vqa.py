@@ -25,7 +25,8 @@ def get_data_tuple(splits: str, bs:int, shuffle=False, drop_last=False, dataset_
     dataset_class = datasets.get(dataset_type)
     if dataset_class is None:
         raise ValueError("unsupported dataset type {}".format(dataset_type))
-    dset = dataset_class(splits)
+
+    dset = dataset_class(splits, args.vocab_size)
     tset = VQATorchDataset(dset)
     evaluator = VQAEvaluator(dset)
     data_loader = DataLoader(

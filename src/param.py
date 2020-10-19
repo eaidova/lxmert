@@ -38,6 +38,7 @@ def parse_args():
     parser.add_argument("--valid", default='valid')
     parser.add_argument("--test", default=None)
     parser.add_argument('--dataset_type', required=False, default='vqa')
+    parser.add_argument('--vocab_size', required=False, type=int, default=5000)
 
     # Training Hyper-parameters
     parser.add_argument('--batchSize', dest='batch_size', type=int, default=256)
