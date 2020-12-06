@@ -39,6 +39,9 @@ def parse_args():
     parser.add_argument("--test", default=None)
     parser.add_argument('--dataset_type', required=False, default='vqa')
     parser.add_argument('--vocab_size', required=False, type=int, default=5000)
+    parser.add_argument('--dump_errors', action='store_true')
+    parser.add_argument('--dump_with_score', required=False, type=float)
+    parser.add_argument('--images_dir', required=False, default='data/vizwiz/val')
 
     # Training Hyper-parameters
     parser.add_argument('--batchSize', dest='batch_size', type=int, default=256)
@@ -67,6 +70,8 @@ def parse_args():
                              'the model would be trained from scratch. If --fromScratch is'
                              ' not specified, the model would load BERT-pre-trained weights by'
                              ' default. ')
+    parser.add_argument('--encoder_type', default='lxrt', choices=['lxrt', 'inter_bert'], required=False)
+    parser.add_argument('--config_file', required=False)
 
     # Optimization
     parser.add_argument("--mceLoss", dest='mce_loss', action='store_const', default=False, const=True)

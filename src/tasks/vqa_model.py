@@ -5,18 +5,25 @@ import torch.nn as nn
 
 from param import args
 from lxrt.entry import LXRTEncoder
+from inter_bert.entry import InterBERTEncoder
 from lxrt.modeling import BertLayerNorm, GeLU
 
 # Max length including <bos> and <eos>
 MAX_VQA_LENGTH = 20
+encoders = {
+    'lxrt': LXRTEncoder,
+    'inter_bert': InterBERTEncoder
+}
 
 
 class VQAModel(nn.Module):
-    def __init__(self, num_answers):
+    def __init__(self, num_answers, encoder_type='lxrt'):
         super().__init__()
+        self.encoder_type = encoder_type
+        encoder_class = encoders[encoder_type]
         
         # Build LXRT encoder
-        self.lxrt_encoder = LXRTEncoder(
+        self.lxrt_encoder = encoder_class(
             args,
             max_seq_length=MAX_VQA_LENGTH
         )
@@ -29,12 +36,15 @@ class VQAModel(nn.Module):
     def create_head(self, num_answers):
         hid_dim = self.lxrt_encoder.dim
         if self.logit_fc is None:
-            self.logit_fc = nn.Sequential(
-                nn.Linear(hid_dim, hid_dim * 2),
-                GeLU(),
-                BertLayerNorm(hid_dim * 2, eps=1e-12),
-                nn.Linear(hid_dim * 2, num_answers)
-            )
+            if self.encoder_type == 'lxrt':
+                self.logit_fc = nn.Sequential(
+                     nn.Linear(hid_dim, hid_dim * 2),
+                     GeLU(),
+                     BertLayerNorm(hid_dim * 2, eps=1e-12),
+                     nn.Linear(hid_dim * 2, num_answers)
+                )
+            else:
+                self.logit_fc = nn.Linear(1024, num_answers)
             init_weights = (
                 self.lxrt_encoder.model.init_bert_weights
                 if not isinstance(self.lxrt_encoder.model, nn.DataParallel)
@@ -58,5 +68,3 @@ class VQAModel(nn.Module):
         logit = self.logit_fc(x)
 
         return logit
-
-
